@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from datetime import date, datetime
+from enum import Enum
 from typing import Any
 
 from aiohttp import web
@@ -10,6 +13,8 @@ import voluptuous as vol
 from homeassistant.components import persistent_notification
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, PAIRING_MANAGER
@@ -23,6 +28,63 @@ def _manager(hass: HomeAssistant) -> PairingManager:
     return hass.data[DOMAIN][PAIRING_MANAGER]
 
 
+def _json_safe(value: Any) -> Any:
+    """Convert Home Assistant values into JSON-safe primitives."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return _json_safe(value.value)
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "as_dict"):
+        try:
+            return _json_safe(value.as_dict())
+        except Exception:  # noqa: BLE001
+            pass
+    return str(value)
+
+
+def _entity_payload(hass: HomeAssistant, entity_id: str) -> dict[str, Any] | None:
+    """Build one robust client entity payload from current registries and state."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return None
+
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    area_reg = ar.async_get(hass)
+    entry = ent_reg.async_get(entity_id)
+    device = dev_reg.async_get(entry.device_id) if entry and entry.device_id else None
+    area_id = (entry.area_id if entry else None) or (device.area_id if device else None)
+    area = area_reg.async_get_area(area_id) if area_id else None
+
+    name = None
+    if entry:
+        name = entry.name or entry.original_name
+    if not name:
+        name = state.attributes.get("friendly_name")
+
+    return {
+        "entity_id": entity_id,
+        "state": state.state,
+        "attributes": _json_safe(dict(state.attributes)),
+        "last_changed": state.last_changed.isoformat(),
+        "last_updated": state.last_updated.isoformat(),
+        "area_id": area_id,
+        "area_name": area.name if area else None,
+        "device_id": entry.device_id if entry else None,
+        "device_name": (device.name_by_user or device.name) if device else None,
+        "name": name,
+        "icon": (entry.icon or entry.original_icon) if entry else None,
+        "device_class": entry.device_class if entry else None,
+        "unit_of_measurement": entry.unit_of_measurement if entry else None,
+    }
+
+
 class CouchMateEntitiesView(HomeAssistantView):
     url = "/api/couchmate/entities"
     name = "api:couchmate:entities"
@@ -32,30 +94,23 @@ class CouchMateEntitiesView(HomeAssistantView):
         hass = request.app["hass"]
         if DOMAIN not in hass.data:
             return web.json_response({"error": "CouchMate Core not configured"}, status=400)
-        entities = hass.data[DOMAIN].get("entities", [])
-        ent_reg = er.async_get(hass)
+        selected = list(hass.data[DOMAIN].get("entities", []))
         detailed_entities: list[dict[str, Any]] = []
-        for entity_id in entities:
-            state = hass.states.get(entity_id)
-            entry = ent_reg.async_get(entity_id)
-            entity_data: dict[str, Any] = {
-                "entity_id": entity_id,
-                "state": state.state if state else None,
-                "attributes": dict(state.attributes) if state else {},
-                "last_changed": state.last_changed.isoformat() if state else None,
-                "last_updated": state.last_updated.isoformat() if state else None,
-            }
-            if entry:
-                entity_data.update({
-                    "name": entry.name or entry.original_name,
-                    "icon": entry.icon or entry.original_icon,
-                    "device_class": entry.device_class,
-                    "unit_of_measurement": entry.unit_of_measurement,
-                    "area_id": entry.area_id,
-                    "device_id": entry.device_id,
-                })
-            detailed_entities.append(entity_data)
-        return web.json_response({"entities": detailed_entities, "count": len(detailed_entities)})
+        skipped: list[str] = []
+        for entity_id in selected:
+            try:
+                payload = _entity_payload(hass, entity_id)
+                if payload is None:
+                    skipped.append(entity_id)
+                    continue
+                detailed_entities.append(payload)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.exception("Unable to serialize CouchMate entity %s", entity_id)
+                skipped.append(f"{entity_id}: {err}")
+        return web.json_response(
+            {"entities": detailed_entities, "count": len(detailed_entities), "skipped": skipped},
+            headers={"Cache-Control": "no-store"},
+        )
 
     async def post(self, request: web.Request) -> web.Response:
         hass = request.app["hass"]
@@ -78,7 +133,7 @@ class CouchMateInfoView(HomeAssistantView):
         hass = request.app["hass"]
         return web.json_response({
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.3",
+            "version": "1.1.0-alpha.4",
             "domain": DOMAIN,
             "filtered_entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
             "pairing": True,
@@ -198,7 +253,7 @@ class CouchMateClientInfoView(HomeAssistantView):
         return web.json_response({
             "client_id": client_id,
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.3",
+            "version": "1.1.0-alpha.4",
             "status": "active",
             "entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
         })
@@ -214,28 +269,31 @@ class CouchMateClientEntitiesView(HomeAssistantView):
         if client_id is None:
             return web.json_response({"error": "unauthorized"}, status=401)
         hass = request.app["hass"]
-        ent_reg = er.async_get(hass)
+        selected = list(hass.data.get(DOMAIN, {}).get("entities", []))
         entities: list[dict[str, Any]] = []
-        for entity_id in hass.data.get(DOMAIN, {}).get("entities", []):
-            state = hass.states.get(entity_id)
-            if state is None:
-                continue
-            entry = ent_reg.async_get(entity_id)
-            entities.append({
-                "entity_id": entity_id,
-                "state": state.state,
-                "attributes": dict(state.attributes),
-                "last_changed": state.last_changed.isoformat(),
-                "last_updated": state.last_updated.isoformat(),
-                "area_id": entry.area_id if entry else None,
-                "device_id": entry.device_id if entry else None,
-                "name": (entry.name or entry.original_name) if entry else None,
-            })
-        return web.json_response({
-            "client_id": client_id,
-            "entities": entities,
-            "count": len(entities),
-        })
+        skipped: list[str] = []
+
+        for entity_id in selected:
+            try:
+                payload = _entity_payload(hass, entity_id)
+                if payload is None:
+                    skipped.append(entity_id)
+                    continue
+                entities.append(payload)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.exception("Unable to serialize CouchMate client entity %s", entity_id)
+                skipped.append(f"{entity_id}: {err}")
+
+        return web.json_response(
+            {
+                "client_id": client_id,
+                "entities": entities,
+                "count": len(entities),
+                "selected_count": len(selected),
+                "skipped": skipped,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 async def async_setup_api(hass: HomeAssistant) -> None:

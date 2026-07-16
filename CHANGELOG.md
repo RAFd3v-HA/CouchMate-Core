@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0-alpha.4
+
+- Fixed HTTP 500 responses from the paired-client entities endpoint when entity attributes contain dates, sets, enums, or other non-JSON-native values.
+- The client entities API now reads the current selection for every request and disables caching.
+- Added robust handling for deleted or unavailable entities.
+- Added resolved area and device names, including device-area fallback.
+- Added `selected_count` and `skipped` diagnostics to the client payload.
+
 ## 1.1.0-alpha.3
 
 - Added a CouchMate management menu under the integration options.

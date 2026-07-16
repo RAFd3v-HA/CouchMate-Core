@@ -48,7 +48,7 @@ Pairing sessions expire after five minutes and can only be exchanged once.
 
 ## Version
 
-`1.1.0-alpha.3`
+`1.1.0-alpha.4`
 
 
 ## Pairing management
