@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "1/5 – Bereiche auswählen",
+        "description": "Wähle die Bereiche aus, die CouchMate verwenden darf.",
+        "data": {"areas": "Bereiche"}
+      },
+      "devices": {
+        "title": "2/5 – Geräte auswählen",
+        "description": "Wähle zusätzliche vollständige Geräte aus.",
+        "data": {"devices": "Geräte"}
+      },
+      "entities": {
+        "title": "3/5 – Einzelne Entitäten auswählen",
+        "description": "Wähle zusätzliche einzelne Entitäten aus.",
+        "data": {"entities": "Zusätzliche Entitäten"}
+      },
+      "exclusions": {
+        "title": "4/5 – Entitäten ausschließen",
+        "description": "Diese Entitäten werden trotz Bereichs- oder Geräteauswahl nicht ausgeliefert.",
+        "data": {"excluded_entities": "Ausgeschlossene Entitäten"}
+      },
+      "summary": {
+        "title": "5/5 – Auswahl prüfen",
+        "description": "Bereiche ({area_count}): {areas}\n\nGeräte ({device_count}): {devices}\n\nEinzelne Entitäten ({entity_count}): {entities}\n\nAusschlüsse ({excluded_count}): {excluded}\n\nInsgesamt werden {resolved_count} Entitäten freigegeben.",
+        "data": {"confirm": "Auswahl speichern"}
+      }
+    },
+    "abort": {"already_configured": "CouchMate Core ist bereits konfiguriert."}
+  },
+  "options": {
+    "step": {
+      "init": {"title": "1/5 – Bereiche ändern", "description": "Aktuell sind {resolved_count} Entitäten freigegeben.", "data": {"areas": "Bereiche"}},
+      "devices": {"title": "2/5 – Geräte ändern", "description": "Alle bisherigen Geräte sind vorausgewählt.", "data": {"devices": "Geräte"}},
+      "entities": {"title": "3/5 – Einzelne Entitäten ändern", "description": "Alle bisherigen Einzelentitäten sind vorausgewählt.", "data": {"entities": "Zusätzliche Entitäten"}},
+      "exclusions": {"title": "4/5 – Ausschlüsse ändern", "description": "Diese Entitäten werden nicht ausgeliefert.", "data": {"excluded_entities": "Ausgeschlossene Entitäten"}},
+      "summary": {"title": "5/5 – Änderungen prüfen", "description": "Bereiche ({area_count}): {areas}\n\nGeräte ({device_count}): {devices}\n\nEinzelne Entitäten ({entity_count}): {entities}\n\nAusschlüsse ({excluded_count}): {excluded}\n\nInsgesamt werden {resolved_count} Entitäten freigegeben.", "data": {"confirm": "Änderungen speichern"}}
+    }
+  }
+}

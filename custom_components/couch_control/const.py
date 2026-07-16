@@ -1,0 +1,27 @@
+"""Constants for CouchMate Core.
+
+The legacy technical domain is intentionally retained for Apple TV
+compatibility.
+"""
+
+DOMAIN = "couch_control"
+STORAGE_KEY = "couch_control"
+STORAGE_VERSION = 1
+
+CONF_ENTITIES = "entities"
+CONF_EXCLUDED_ENTITIES = "excluded_entities"
+CONF_AREAS = "areas"
+CONF_DEVICES = "devices"
+CONF_FILTER_MODE = "filter_mode"
+
+FILTER_MODE_INCLUDE = "include"
+FILTER_MODE_EXCLUDE = "exclude"
+
+WS_TYPE_SUBSCRIBE_FILTERED = f"{DOMAIN}/subscribe_filtered"
+WS_TYPE_GET_ENTITIES = f"{DOMAIN}/get_entities"
+WS_TYPE_UPDATE_ENTITIES = f"{DOMAIN}/update_entities"
+# CouchMate pairing API
+PAIRING_SESSION_LIFETIME_SECONDS = 300
+PAIRING_CLIENT_STORAGE_VERSION = 1
+PAIRING_CLIENT_STORAGE_KEY = "couch_control.paired_clients"
+PAIRING_MANAGER = "pairing_manager"

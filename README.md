@@ -1,38 +1,51 @@
 # CouchMate Core
 
-![CouchMate Core](assets/couchmate-banner.png)
+Home Assistant custom integration for the CouchMate Apple TV app.
 
-**CouchMate Core** is a Home Assistant custom integration for selecting the areas, devices, and entities exposed to the compatible Apple TV client.
+## Highlights
 
-> Alpha release: the visible product name is CouchMate Core, while the technical Home Assistant domain and legacy API identifiers intentionally remain `couch_control` for compatibility.
+- Select areas, devices and individual entities through the Home Assistant UI.
+- Exclude individual entities from selected areas or devices.
+- Filtered REST and WebSocket APIs for the CouchMate client.
+- New local Apple TV pairing API with short-lived codes such as `CM-A7KD-P4XM`.
+- Paired-client credentials are stored as SHA-256 hashes in Home Assistant storage.
+- German and English translations.
 
-## Features
+> The technical domain remains `couch_control` for compatibility with the existing alpha integration.
 
-- Select complete Home Assistant areas
-- Select complete devices
-- Add individual entities
-- Exclude individual entities
-- Review and change the selection through **Configure**
-- Diagnostic entities show the selected and resolved totals
-- Existing REST and WebSocket interfaces remain available
+## Installation
 
-## Installation through HACS
+1. Upload this repository to GitHub.
+2. Add the repository to HACS as a custom **Integration** repository.
+3. Install **CouchMate Core** and restart Home Assistant.
+4. Add CouchMate Core under **Settings → Devices & services**.
 
-1. Add `https://github.com/RAFd3v-HA/CouchMate-Core` as a custom **Integration** repository in HACS.
-2. Install **CouchMate Core**.
-3. Restart Home Assistant.
-4. Add **CouchMate Core** under **Settings → Devices & services**.
+## Pairing API (alpha)
 
-The original integration and CouchMate Core cannot be installed at the same time because both intentionally use the technical domain `couch_control`.
+The Apple TV client can create a request without a Home Assistant token:
 
-## Updating from the previous test build
+- `POST /api/couch_control/pairing/create`
+- `GET /api/couch_control/pairing/status?session_id=...`
+- `POST /api/couch_control/pairing/exchange`
 
-Replace the repository files, download the update in HACS, and restart Home Assistant. Your stored selection should remain available. The active version is shown on the CouchMate Core device page.
+Approve the displayed code in Home Assistant via **Developer tools → Actions**:
 
-## Compatibility promise for this alpha
+- Action: `couch_control.approve_pairing`
+- Code: `CM-XXXX-XXXX`
 
-This release is deliberately based on the already tested Beta 6 flow. It does not replace the selector implementation, domain, storage key, REST paths, or WebSocket command names.
+An authenticated approval endpoint is also available:
 
-## License and attribution
+- `POST /api/couch_control/pairing/approve`
 
-CouchMate Core is derived from the MIT-licensed CouchControlHACS project by Lucas Franz. The original copyright and MIT license are retained in `LICENSE`.
+Pairing sessions expire after five minutes and can only be exchanged once.
+
+## Existing client APIs
+
+- `GET /api/couch_control/entities`
+- `GET /api/couch_control/info`
+- WebSocket `couch_control/get_entities`
+- WebSocket `couch_control/subscribe_filtered`
+
+## Version
+
+`1.1.0-alpha.1`
