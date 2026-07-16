@@ -48,4 +48,20 @@ Pairing sessions expire after five minutes and can only be exchanged once.
 
 ## Version
 
-`1.1.0-alpha.2`
+`1.1.0-alpha.3`
+
+
+## Pairing management
+
+Open **Settings → Devices & services → CouchMate Core → Configure**. The management menu lets you:
+
+- edit the areas, devices, and entities exposed to CouchMate;
+- approve or reject pending Apple TV pairing requests;
+- revoke previously paired CouchMate clients.
+
+After a client exchanges its one-time pairing ticket, it can use the returned CouchMate access token with:
+
+- `GET /api/couchmate/client/info`
+- `GET /api/couchmate/client/entities`
+
+Send the token as `Authorization: Bearer <token>`.

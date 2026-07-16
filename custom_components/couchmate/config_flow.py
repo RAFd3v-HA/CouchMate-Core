@@ -1,14 +1,11 @@
-"""Checklist-style GUI config flow for CouchMate Core.
-
-The technical domain remains ``couchmate`` for compatibility with the
-existing Apple TV client.
-"""
+"""Configuration and management flows for CouchMate Core."""
 from __future__ import annotations
 
 from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components import persistent_notification
 from homeassistant.core import callback
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.selector import (
@@ -20,21 +17,35 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .const import CONF_AREAS, CONF_DEVICES, CONF_ENTITIES, CONF_EXCLUDED_ENTITIES, DOMAIN
+from .const import (
+    CONF_AREAS,
+    CONF_DEVICES,
+    CONF_ENTITIES,
+    CONF_EXCLUDED_ENTITIES,
+    DOMAIN,
+    PAIRING_MANAGER,
+)
 from .storage import async_load_entities, async_save_entities
 
 CONF_CONFIRM = "confirm"
+CONF_PAIRING_CODE = "pairing_code"
+CONF_CLIENTS = "clients"
 
 
 def _short(items: list[str], limit: int = 10) -> str:
     if not items:
         return "–"
-    return ", ".join(items[:limit]) + (f" (+{len(items) - limit} weitere)" if len(items) > limit else "")
+    return ", ".join(items[:limit]) + (
+        f" (+{len(items) - limit} weitere)" if len(items) > limit else ""
+    )
 
 
 def _area_options(hass) -> list[SelectOptionDict]:
     registry = ar.async_get(hass)
-    return [SelectOptionDict(value=area.id, label=area.name) for area in sorted(registry.areas.values(), key=lambda x: x.name.casefold())]
+    return [
+        SelectOptionDict(value=area.id, label=area.name)
+        for area in sorted(registry.areas.values(), key=lambda item: item.name.casefold())
+    ]
 
 
 def _device_options(hass) -> list[SelectOptionDict]:
@@ -58,7 +69,12 @@ def _entity_options(hass) -> list[SelectOptionDict]:
         if entry.disabled:
             continue
         state = hass.states.get(entry.entity_id)
-        name = entry.name or entry.original_name or (state.name if state else None) or entry.entity_id
+        name = (
+            entry.name
+            or entry.original_name
+            or (state.name if state else None)
+            or entry.entity_id
+        )
         device = devices.async_get(entry.device_id) if entry.device_id else None
         area_id = entry.area_id or (device.area_id if device else None)
         area = areas.async_get_area(area_id) if area_id else None
@@ -69,11 +85,11 @@ def _entity_options(hass) -> list[SelectOptionDict]:
     return sorted(options, key=lambda item: item["label"].casefold())
 
 
-def _selector(options: list[SelectOptionDict]) -> SelectSelector:
+def _selector(options: list[SelectOptionDict], *, multiple: bool = True) -> SelectSelector:
     return SelectSelector(
         SelectSelectorConfig(
             options=options,
-            multiple=True,
+            multiple=multiple,
             mode=SelectSelectorMode.LIST,
         )
     )
@@ -89,17 +105,27 @@ class _SelectionMixin:
         area_reg = ar.async_get(self.hass)
         device_reg = dr.async_get(self.hass)
         entity_reg = er.async_get(self.hass)
-        area_names = [area.name for area_id in self._areas if (area := area_reg.async_get_area(area_id))]
-        device_names = []
+        area_names = [
+            area.name
+            for area_id in self._areas
+            if (area := area_reg.async_get_area(area_id))
+        ]
+        device_names: list[str] = []
         for device_id in self._devices:
             if device := device_reg.async_get(device_id):
                 device_names.append(device.name_by_user or device.name or device_id)
-        entity_names = []
+        entity_names: list[str] = []
         for entity_id in self._entities:
             entry = entity_reg.async_get(entity_id)
             state = self.hass.states.get(entity_id)
-            entity_names.append((entry.name if entry else None) or (entry.original_name if entry else None) or (state.name if state else None) or entity_id)
+            entity_names.append(
+                (entry.name if entry else None)
+                or (entry.original_name if entry else None)
+                or (state.name if state else None)
+                or entity_id
+            )
         from . import _resolve_filter
+
         resolved = _resolve_filter(
             self.hass,
             areas=self._areas,
@@ -129,6 +155,7 @@ class _SelectionMixin:
         await async_save_entities(self.hass, data)
         if DOMAIN in self.hass.data:
             from . import _resolve_filter
+
             self.hass.data[DOMAIN]["entities"] = sorted(
                 _resolve_filter(
                     self.hass,
@@ -141,13 +168,15 @@ class _SelectionMixin:
             self.hass.data[DOMAIN]["areas"] = list(self._areas)
             self.hass.data[DOMAIN]["devices"] = list(self._devices)
             self.hass.data[DOMAIN]["explicit_entities"] = list(self._entities)
-            self.hass.data[DOMAIN]["excluded_entities"] = list(self._excluded_entities)
+            self.hass.data[DOMAIN]["excluded_entities"] = list(
+                self._excluded_entities
+            )
 
 
-class CouchControlConfigFlow(_SelectionMixin, config_entries.ConfigFlow, domain=DOMAIN):
+class CouchMateConfigFlow(_SelectionMixin, config_entries.ConfigFlow, domain=DOMAIN):
     """Configure CouchMate Core."""
 
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self) -> None:
         self._areas = []
@@ -163,7 +192,9 @@ class CouchControlConfigFlow(_SelectionMixin, config_entries.ConfigFlow, domain=
             return await self.async_step_devices()
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({vol.Optional(CONF_AREAS, default=[]): _selector(_area_options(self.hass))}),
+            data_schema=vol.Schema(
+                {vol.Optional(CONF_AREAS, default=[]): _selector(_area_options(self.hass))}
+            ),
         )
 
     async def async_step_devices(self, user_input: dict[str, Any] | None = None):
@@ -172,7 +203,9 @@ class CouchControlConfigFlow(_SelectionMixin, config_entries.ConfigFlow, domain=
             return await self.async_step_entities()
         return self.async_show_form(
             step_id="devices",
-            data_schema=vol.Schema({vol.Optional(CONF_DEVICES, default=[]): _selector(_device_options(self.hass))}),
+            data_schema=vol.Schema(
+                {vol.Optional(CONF_DEVICES, default=[]): _selector(_device_options(self.hass))}
+            ),
         )
 
     async def async_step_entities(self, user_input: dict[str, Any] | None = None):
@@ -181,7 +214,9 @@ class CouchControlConfigFlow(_SelectionMixin, config_entries.ConfigFlow, domain=
             return await self.async_step_exclusions()
         return self.async_show_form(
             step_id="entities",
-            data_schema=vol.Schema({vol.Optional(CONF_ENTITIES, default=[]): _selector(_entity_options(self.hass))}),
+            data_schema=vol.Schema(
+                {vol.Optional(CONF_ENTITIES, default=[]): _selector(_entity_options(self.hass))}
+            ),
         )
 
     async def async_step_exclusions(self, user_input: dict[str, Any] | None = None):
@@ -190,7 +225,13 @@ class CouchControlConfigFlow(_SelectionMixin, config_entries.ConfigFlow, domain=
             return await self.async_step_summary()
         return self.async_show_form(
             step_id="exclusions",
-            data_schema=vol.Schema({vol.Optional(CONF_EXCLUDED_ENTITIES, default=[]): _selector(_entity_options(self.hass))}),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_EXCLUDED_ENTITIES, default=[]): _selector(
+                        _entity_options(self.hass)
+                    )
+                }
+            ),
         )
 
     async def async_step_summary(self, user_input: dict[str, Any] | None = None):
@@ -205,18 +246,24 @@ class CouchControlConfigFlow(_SelectionMixin, config_entries.ConfigFlow, domain=
             return self.async_create_entry(title="CouchMate Core", data=data)
         return self.async_show_form(
             step_id="summary",
-            data_schema=vol.Schema({vol.Required(CONF_CONFIRM, default=True): BooleanSelector(BooleanSelectorConfig())}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_CONFIRM, default=True): BooleanSelector(
+                        BooleanSelectorConfig()
+                    )
+                }
+            ),
             description_placeholders=self._summary(),
         )
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return CouchControlOptionsFlow()
+        return CouchMateOptionsFlow()
 
 
-class CouchControlOptionsFlow(_SelectionMixin, config_entries.OptionsFlow):
-    """Edit CouchMate Core selections."""
+class CouchMateOptionsFlow(_SelectionMixin, config_entries.OptionsFlow):
+    """Manage selections, pairing requests, and paired clients."""
 
     def __init__(self) -> None:
         self._areas = []
@@ -229,20 +276,51 @@ class CouchControlOptionsFlow(_SelectionMixin, config_entries.OptionsFlow):
         if self._loaded:
             return
         current = await async_load_entities(self.hass)
-        self._areas = list(current.get(CONF_AREAS, self.config_entry.data.get(CONF_AREAS, [])))
-        self._devices = list(current.get(CONF_DEVICES, self.config_entry.data.get(CONF_DEVICES, [])))
-        self._entities = list(current.get(CONF_ENTITIES, self.config_entry.data.get(CONF_ENTITIES, [])))
-        self._excluded_entities = list(current.get(CONF_EXCLUDED_ENTITIES, self.config_entry.data.get(CONF_EXCLUDED_ENTITIES, [])))
+        self._areas = list(
+            current.get(CONF_AREAS, self.config_entry.data.get(CONF_AREAS, []))
+        )
+        self._devices = list(
+            current.get(CONF_DEVICES, self.config_entry.data.get(CONF_DEVICES, []))
+        )
+        self._entities = list(
+            current.get(CONF_ENTITIES, self.config_entry.data.get(CONF_ENTITIES, []))
+        )
+        self._excluded_entities = list(
+            current.get(
+                CONF_EXCLUDED_ENTITIES,
+                self.config_entry.data.get(CONF_EXCLUDED_ENTITIES, []),
+            )
+        )
         self._loaded = True
+
+    def _pairing_manager(self):
+        return self.hass.data[DOMAIN][PAIRING_MANAGER]
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         await self._load()
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=[
+                "selection",
+                "approve_pairing",
+                "reject_pairing",
+                "paired_clients",
+            ],
+        )
+
+    async def async_step_selection(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
             self._areas = list(user_input.get(CONF_AREAS, []))
             return await self.async_step_devices()
         return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({vol.Optional(CONF_AREAS, default=self._areas): _selector(_area_options(self.hass))}),
+            step_id="selection",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_AREAS, default=self._areas): _selector(
+                        _area_options(self.hass)
+                    )
+                }
+            ),
             description_placeholders=self._summary(),
         )
 
@@ -252,7 +330,13 @@ class CouchControlOptionsFlow(_SelectionMixin, config_entries.OptionsFlow):
             return await self.async_step_entities()
         return self.async_show_form(
             step_id="devices",
-            data_schema=vol.Schema({vol.Optional(CONF_DEVICES, default=self._devices): _selector(_device_options(self.hass))}),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_DEVICES, default=self._devices): _selector(
+                        _device_options(self.hass)
+                    )
+                }
+            ),
         )
 
     async def async_step_entities(self, user_input: dict[str, Any] | None = None):
@@ -261,7 +345,13 @@ class CouchControlOptionsFlow(_SelectionMixin, config_entries.OptionsFlow):
             return await self.async_step_exclusions()
         return self.async_show_form(
             step_id="entities",
-            data_schema=vol.Schema({vol.Optional(CONF_ENTITIES, default=self._entities): _selector(_entity_options(self.hass))}),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_ENTITIES, default=self._entities): _selector(
+                        _entity_options(self.hass)
+                    )
+                }
+            ),
         )
 
     async def async_step_exclusions(self, user_input: dict[str, Any] | None = None):
@@ -270,7 +360,13 @@ class CouchControlOptionsFlow(_SelectionMixin, config_entries.OptionsFlow):
             return await self.async_step_summary()
         return self.async_show_form(
             step_id="exclusions",
-            data_schema=vol.Schema({vol.Optional(CONF_EXCLUDED_ENTITIES, default=self._excluded_entities): _selector(_entity_options(self.hass))}),
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_EXCLUDED_ENTITIES, default=self._excluded_entities
+                    ): _selector(_entity_options(self.hass))
+                }
+            ),
         )
 
     async def async_step_summary(self, user_input: dict[str, Any] | None = None):
@@ -286,6 +382,126 @@ class CouchControlOptionsFlow(_SelectionMixin, config_entries.OptionsFlow):
             return self.async_create_entry(title="", data={})
         return self.async_show_form(
             step_id="summary",
-            data_schema=vol.Schema({vol.Required(CONF_CONFIRM, default=True): BooleanSelector(BooleanSelectorConfig())}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_CONFIRM, default=True): BooleanSelector(
+                        BooleanSelectorConfig()
+                    )
+                }
+            ),
             description_placeholders=self._summary(),
+        )
+
+    def _pending_options(self) -> list[SelectOptionDict]:
+        return [
+            SelectOptionDict(
+                value=session.code,
+                label=f"{session.device_name} · {session.code} · {session.remaining_seconds}s",
+            )
+            for session in self._pairing_manager().list_pending_sessions()
+        ]
+
+    async def async_step_approve_pairing(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        options = self._pending_options()
+        if not options:
+            return self.async_abort(reason="no_pending_pairings")
+        if user_input is not None:
+            session = self._pairing_manager().approve(
+                str(user_input[CONF_PAIRING_CODE])
+            )
+            if session is None:
+                return self.async_show_form(
+                    step_id="approve_pairing",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(CONF_PAIRING_CODE): _selector(
+                                options, multiple=False
+                            )
+                        }
+                    ),
+                    errors={"base": "pairing_not_found"},
+                )
+            persistent_notification.async_dismiss(
+                self.hass, f"{DOMAIN}_pairing_{session.session_id}"
+            )
+            return self.async_create_entry(title="", data={})
+        return self.async_show_form(
+            step_id="approve_pairing",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PAIRING_CODE): _selector(
+                        options, multiple=False
+                    )
+                }
+            ),
+        )
+
+    async def async_step_reject_pairing(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        options = self._pending_options()
+        if not options:
+            return self.async_abort(reason="no_pending_pairings")
+        if user_input is not None:
+            session = self._pairing_manager().cancel_by_code(
+                str(user_input[CONF_PAIRING_CODE])
+            )
+            if session is None:
+                return self.async_show_form(
+                    step_id="reject_pairing",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(CONF_PAIRING_CODE): _selector(
+                                options, multiple=False
+                            )
+                        }
+                    ),
+                    errors={"base": "pairing_not_found"},
+                )
+            persistent_notification.async_dismiss(
+                self.hass, f"{DOMAIN}_pairing_{session.session_id}"
+            )
+            return self.async_create_entry(title="", data={})
+        return self.async_show_form(
+            step_id="reject_pairing",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PAIRING_CODE): _selector(
+                        options, multiple=False
+                    )
+                }
+            ),
+        )
+
+    async def async_step_paired_clients(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        clients = self._pairing_manager().list_clients()
+        options = [
+            SelectOptionDict(
+                value=client["client_id"],
+                label=(
+                    f"{client.get('device_name', 'CouchMate')} · "
+                    f"{client.get('client_id')}"
+                ),
+            )
+            for client in clients
+        ]
+        if not options:
+            return self.async_abort(reason="no_paired_clients")
+        if user_input is not None:
+            for client_id in user_input.get(CONF_CLIENTS, []):
+                await self._pairing_manager().async_revoke_client(client_id)
+            return self.async_create_entry(title="", data={})
+        return self.async_show_form(
+            step_id="paired_clients",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_CLIENTS, default=[]): _selector(
+                        options, multiple=True
+                    )
+                }
+            ),
         )

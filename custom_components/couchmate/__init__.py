@@ -311,10 +311,26 @@ async def _async_setup_services(hass: HomeAssistant) -> None:
         if session is None:
             _LOGGER.warning("Pairing code not found: %s", code)
             return
+        persistent_notification.async_dismiss(
+            hass, f"{DOMAIN}_pairing_{session.session_id}"
+        )
         _LOGGER.info("Approved CouchMate pairing for %s", session.device_name)
+
+    async def reject_pairing(call):
+        """Reject a pending Apple TV pairing code."""
+        code = str(call.data.get("code", ""))
+        session = hass.data[DOMAIN][PAIRING_MANAGER].cancel_by_code(code)
+        if session is None:
+            _LOGGER.warning("Pairing code not found: %s", code)
+            return
+        persistent_notification.async_dismiss(
+            hass, f"{DOMAIN}_pairing_{session.session_id}"
+        )
+        _LOGGER.info("Rejected CouchMate pairing for %s", session.device_name)
 
     hass.services.async_register(DOMAIN, "add_entity", add_entity)
     hass.services.async_register(DOMAIN, "remove_entity", remove_entity)
     hass.services.async_register(DOMAIN, "set_entities", set_entities)
     hass.services.async_register(DOMAIN, "uninstall", uninstall)
     hass.services.async_register(DOMAIN, "approve_pairing", approve_pairing)
+    hass.services.async_register(DOMAIN, "reject_pairing", reject_pairing)

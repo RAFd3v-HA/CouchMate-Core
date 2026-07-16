@@ -78,7 +78,7 @@ class CouchMateInfoView(HomeAssistantView):
         hass = request.app["hass"]
         return web.json_response({
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.2",
+            "version": "1.1.0-alpha.3",
             "domain": DOMAIN,
             "filtered_entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
             "pairing": True,
@@ -155,6 +155,89 @@ class PairingExchangeView(HomeAssistantView):
         return web.json_response(credentials)
 
 
+async def _client_id_from_request(request: web.Request) -> str | None:
+    """Validate a CouchMate client bearer token."""
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return await _manager(request.app["hass"]).async_validate_client_token(token)
+
+
+class PairingCancelView(HomeAssistantView):
+    url = "/api/couchmate/pairing/cancel"
+    name = "api:couchmate:pairing:cancel"
+    requires_auth = False
+
+    async def post(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        session = _manager(request.app["hass"]).cancel(
+            str(data.get("session_id", ""))
+        )
+        if not session:
+            return web.json_response({"error": "session_not_found"}, status=404)
+        persistent_notification.async_dismiss(
+            request.app["hass"], f"{DOMAIN}_pairing_{session.session_id}"
+        )
+        return web.json_response(session.public_dict())
+
+
+class CouchMateClientInfoView(HomeAssistantView):
+    url = "/api/couchmate/client/info"
+    name = "api:couchmate:client:info"
+    requires_auth = False
+
+    async def get(self, request: web.Request) -> web.Response:
+        client_id = await _client_id_from_request(request)
+        if client_id is None:
+            return web.json_response({"error": "unauthorized"}, status=401)
+        hass = request.app["hass"]
+        return web.json_response({
+            "client_id": client_id,
+            "integration": "CouchMate Core",
+            "version": "1.1.0-alpha.3",
+            "status": "active",
+            "entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
+        })
+
+
+class CouchMateClientEntitiesView(HomeAssistantView):
+    url = "/api/couchmate/client/entities"
+    name = "api:couchmate:client:entities"
+    requires_auth = False
+
+    async def get(self, request: web.Request) -> web.Response:
+        client_id = await _client_id_from_request(request)
+        if client_id is None:
+            return web.json_response({"error": "unauthorized"}, status=401)
+        hass = request.app["hass"]
+        ent_reg = er.async_get(hass)
+        entities: list[dict[str, Any]] = []
+        for entity_id in hass.data.get(DOMAIN, {}).get("entities", []):
+            state = hass.states.get(entity_id)
+            if state is None:
+                continue
+            entry = ent_reg.async_get(entity_id)
+            entities.append({
+                "entity_id": entity_id,
+                "state": state.state,
+                "attributes": dict(state.attributes),
+                "last_changed": state.last_changed.isoformat(),
+                "last_updated": state.last_updated.isoformat(),
+                "area_id": entry.area_id if entry else None,
+                "device_id": entry.device_id if entry else None,
+                "name": (entry.name or entry.original_name) if entry else None,
+            })
+        return web.json_response({
+            "client_id": client_id,
+            "entities": entities,
+            "count": len(entities),
+        })
+
+
 async def async_setup_api(hass: HomeAssistant) -> None:
     for view in (
         CouchMateEntitiesView(),
@@ -163,6 +246,9 @@ async def async_setup_api(hass: HomeAssistant) -> None:
         PairingStatusView(),
         PairingApproveView(),
         PairingExchangeView(),
+        PairingCancelView(),
+        CouchMateClientInfoView(),
+        CouchMateClientEntitiesView(),
     ):
         hass.http.register_view(view)
     _LOGGER.info("CouchMate Core REST and pairing API endpoints registered")

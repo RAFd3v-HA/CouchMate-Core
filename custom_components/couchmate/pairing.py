@@ -44,6 +44,10 @@ class PairingSession:
             self.status = PairingStatus.EXPIRED
         return self.status
 
+    @property
+    def remaining_seconds(self) -> int:
+        return max(0, int((self.expires_at - datetime.now(UTC)).total_seconds()))
+
     def public_dict(self) -> dict[str, Any]:
         status = self.refresh_status()
         return {
@@ -51,7 +55,7 @@ class PairingSession:
             "code": self.code,
             "device_name": self.device_name,
             "status": status.value,
-            "expires_in": max(0, int((self.expires_at - datetime.now(UTC)).total_seconds())),
+            "expires_in": self.remaining_seconds,
         }
 
 
@@ -109,6 +113,12 @@ class PairingManager:
             session.exchange_token = secrets.token_urlsafe(32)
         return session
 
+    def cancel_by_code(self, code: str) -> PairingSession | None:
+        session = self.get_by_code(code)
+        if session and session.status in (PairingStatus.WAITING, PairingStatus.APPROVED):
+            session.status = PairingStatus.CANCELLED
+        return session
+
     def cancel(self, session_id: str) -> PairingSession | None:
         session = self.get_by_session_id(session_id)
         if session and session.status in (PairingStatus.WAITING, PairingStatus.APPROVED):
@@ -143,6 +153,17 @@ class PairingManager:
                 await self._async_save_clients()
                 return client_id
         return None
+
+    def list_pending_sessions(self) -> list[PairingSession]:
+        self.cleanup()
+        return sorted(
+            (
+                session
+                for session in self._sessions.values()
+                if session.refresh_status() == PairingStatus.WAITING
+            ),
+            key=lambda session: session.created_at,
+        )
 
     def list_clients(self) -> list[dict[str, Any]]:
         return [
