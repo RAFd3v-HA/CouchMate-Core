@@ -1,0 +1,83 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "1/5 – Select areas",
+        "description": "Select the areas CouchMate may use.",
+        "data": {
+          "areas": "Areas"
+        }
+      },
+      "devices": {
+        "title": "2/5 – Select devices",
+        "description": "Select additional complete devices.",
+        "data": {
+          "devices": "Devices"
+        }
+      },
+      "entities": {
+        "title": "3/5 – Select individual entities",
+        "description": "Select additional individual entities.",
+        "data": {
+          "entities": "Additional entities"
+        }
+      },
+      "exclusions": {
+        "title": "4/5 – Exclude entities",
+        "description": "These entities will not be exposed even when their area or device is selected.",
+        "data": {
+          "excluded_entities": "Excluded entities"
+        }
+      },
+      "summary": {
+        "title": "5/5 – Review selection",
+        "description": "Bereiche ({area_count}): {areas}\n\nGeräte ({device_count}): {devices}\n\nEinzelne Entitäten ({entity_count}): {entities}\n\nAusschlüsse ({excluded_count}): {excluded}\n\nInsgesamt werden {resolved_count} Entitäten freigegeben.",
+        "data": {
+          "confirm": "Save selection"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "CouchMate Core is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "1/5 – Bereiche ändern",
+        "description": "Aktuell sind {resolved_count} Entitäten freigegeben.",
+        "data": {
+          "areas": "Bereiche"
+        }
+      },
+      "devices": {
+        "title": "2/5 – Geräte ändern",
+        "description": "Alle bisherigen Geräte sind vorausgewählt.",
+        "data": {
+          "devices": "Geräte"
+        }
+      },
+      "entities": {
+        "title": "3/5 – Einzelne Entitäten ändern",
+        "description": "Alle bisherigen Einzelentitäten sind vorausgewählt.",
+        "data": {
+          "entities": "Zusätzliche Entitäten"
+        }
+      },
+      "exclusions": {
+        "title": "4/5 – Ausschlüsse ändern",
+        "description": "Diese Entitäten werden nicht ausgeliefert.",
+        "data": {
+          "excluded_entities": "Ausgeschlossene Entitäten"
+        }
+      },
+      "summary": {
+        "title": "5/5 – Änderungen prüfen",
+        "description": "Bereiche ({area_count}): {areas}\n\nGeräte ({device_count}): {devices}\n\nEinzelne Entitäten ({entity_count}): {entities}\n\nAusschlüsse ({excluded_count}): {excluded}\n\nInsgesamt werden {resolved_count} Entitäten freigegeben.",
+        "data": {
+          "confirm": "Änderungen speichern"
+        }
+      }
+    }
+  }
+}

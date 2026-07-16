@@ -11,7 +11,7 @@ Home Assistant custom integration for the CouchMate Apple TV app.
 - Paired-client credentials are stored as SHA-256 hashes in Home Assistant storage.
 - German and English translations.
 
-> The technical domain remains `couch_control` for compatibility with the existing alpha integration.
+> The technical domain remains `couchmate` for compatibility with the existing alpha integration.
 
 ## Installation
 
@@ -24,28 +24,28 @@ Home Assistant custom integration for the CouchMate Apple TV app.
 
 The Apple TV client can create a request without a Home Assistant token:
 
-- `POST /api/couch_control/pairing/create`
-- `GET /api/couch_control/pairing/status?session_id=...`
-- `POST /api/couch_control/pairing/exchange`
+- `POST /api/couchmate/pairing/create`
+- `GET /api/couchmate/pairing/status?session_id=...`
+- `POST /api/couchmate/pairing/exchange`
 
 Approve the displayed code in Home Assistant via **Developer tools → Actions**:
 
-- Action: `couch_control.approve_pairing`
+- Action: `couchmate.approve_pairing`
 - Code: `CM-XXXX-XXXX`
 
 An authenticated approval endpoint is also available:
 
-- `POST /api/couch_control/pairing/approve`
+- `POST /api/couchmate/pairing/approve`
 
 Pairing sessions expire after five minutes and can only be exchanged once.
 
 ## Existing client APIs
 
-- `GET /api/couch_control/entities`
-- `GET /api/couch_control/info`
-- WebSocket `couch_control/get_entities`
-- WebSocket `couch_control/subscribe_filtered`
+- `GET /api/couchmate/entities`
+- `GET /api/couchmate/info`
+- WebSocket `couchmate/get_entities`
+- WebSocket `couchmate/subscribe_filtered`
 
 ## Version
 
-`1.1.0-alpha.1`
+`1.1.0-alpha.2`

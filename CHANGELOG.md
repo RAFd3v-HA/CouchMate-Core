@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0-alpha.1
+## 1.1.0-alpha.2
 
 - Added local CouchMate Apple TV pairing sessions.
 - Added short, readable `CM-XXXX-XXXX` codes.
@@ -11,4 +11,4 @@
 
 ## 1.0.0-alpha.1
 
-- Initial CouchMate Core alpha based on the tested Couch Control selector flow.
+- Initial CouchMate Core alpha based on the tested CouchMate selector flow.
