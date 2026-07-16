@@ -133,7 +133,7 @@ class CouchMateInfoView(HomeAssistantView):
         hass = request.app["hass"]
         return web.json_response({
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.6",
+            "version": "1.1.0-alpha.7",
             "domain": DOMAIN,
             "filtered_entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
             "pairing": True,
@@ -253,7 +253,7 @@ class CouchMateClientInfoView(HomeAssistantView):
         return web.json_response({
             "client_id": client_id,
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.6",
+            "version": "1.1.0-alpha.7",
             "status": "active",
             "entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
         })
@@ -284,10 +284,22 @@ class CouchMateClientEntitiesView(HomeAssistantView):
                 _LOGGER.exception("Unable to serialize CouchMate client entity %s", entity_id)
                 skipped.append(f"{entity_id}: {err}")
 
+        # Send the exact Home Assistant areas that belong to the exposed
+        # entities. This guarantees that an individually selected entity
+        # creates its room in CouchMate without exposing every other entity
+        # from that area.
+        areas_by_id: dict[str, dict[str, str]] = {}
+        for entity in entities:
+            area_id = entity.get("area_id")
+            area_name = entity.get("area_name")
+            if area_id and area_name:
+                areas_by_id[area_id] = {"id": area_id, "name": area_name}
+
         return web.json_response(
             {
                 "client_id": client_id,
                 "entities": entities,
+                "areas": sorted(areas_by_id.values(), key=lambda item: item["name"].casefold()),
                 "count": len(entities),
                 "selected_count": len(selected),
                 "skipped": skipped,

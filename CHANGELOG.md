@@ -31,3 +31,7 @@
 ## 1.1.0-alpha.1
 
 - Initial Apple TV pairing prototype.
+
+## 1.1.0-alpha.7
+- Send exact Home Assistant area metadata for all exposed entities.
+- Individually selected entities now create their assigned room without exposing the whole area.
