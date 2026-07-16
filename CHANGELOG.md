@@ -1,3 +1,8 @@
+## 1.1.0-alpha.5
+
+- Added authenticated client service endpoint for lights, switches, media players, climate devices, covers, scenes and scripts.
+- Service calls are restricted to entities selected in CouchMate.
+
 # Changelog
 
 ## 1.1.0-alpha.4

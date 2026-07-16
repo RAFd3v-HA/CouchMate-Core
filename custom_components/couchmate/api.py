@@ -133,7 +133,7 @@ class CouchMateInfoView(HomeAssistantView):
         hass = request.app["hass"]
         return web.json_response({
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.4",
+            "version": "1.1.0-alpha.5",
             "domain": DOMAIN,
             "filtered_entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
             "pairing": True,
@@ -253,7 +253,7 @@ class CouchMateClientInfoView(HomeAssistantView):
         return web.json_response({
             "client_id": client_id,
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.4",
+            "version": "1.1.0-alpha.5",
             "status": "active",
             "entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
         })
@@ -296,6 +296,67 @@ class CouchMateClientEntitiesView(HomeAssistantView):
         )
 
 
+_ALLOWED_SERVICES: dict[str, set[str]] = {
+    "light": {"turn_on", "turn_off", "toggle"},
+    "switch": {"turn_on", "turn_off", "toggle"},
+    "media_player": {"media_play_pause", "media_play", "media_pause", "turn_on", "turn_off", "volume_up", "volume_down"},
+    "climate": {"turn_on", "turn_off", "set_temperature", "set_hvac_mode"},
+    "cover": {"open_cover", "close_cover", "stop_cover", "set_cover_position"},
+    "scene": {"turn_on"},
+    "script": {"turn_on"},
+}
+
+
+class CouchMateClientServiceView(HomeAssistantView):
+    url = "/api/couchmate/client/service"
+    name = "api:couchmate:client:service"
+    requires_auth = False
+
+    async def post(self, request: web.Request) -> web.Response:
+        client_id = await _client_id_from_request(request)
+        if client_id is None:
+            return web.json_response({"error": "unauthorized"}, status=401)
+
+        hass = request.app["hass"]
+        try:
+            payload = await request.json()
+            domain = str(payload.get("domain", "")).strip()
+            service = str(payload.get("service", "")).strip()
+            entity_ids = [str(item) for item in payload.get("entity_ids", [])]
+            service_data = dict(payload.get("data", {}) or {})
+        except (ValueError, TypeError):
+            return web.json_response({"error": "invalid_json"}, status=400)
+
+        if service not in _ALLOWED_SERVICES.get(domain, set()):
+            return web.json_response({"error": "service_not_allowed"}, status=403)
+        if not entity_ids:
+            return web.json_response({"error": "missing_entity_ids"}, status=400)
+
+        selected = set(hass.data.get(DOMAIN, {}).get("entities", []))
+        denied = [entity_id for entity_id in entity_ids if entity_id not in selected]
+        if denied:
+            return web.json_response({"error": "entity_not_selected", "entities": denied}, status=403)
+
+        wrong_domain = [entity_id for entity_id in entity_ids if entity_id.split(".", 1)[0] != domain]
+        if wrong_domain:
+            return web.json_response({"error": "domain_mismatch", "entities": wrong_domain}, status=400)
+
+        service_data["entity_id"] = entity_ids
+        try:
+            await hass.services.async_call(domain, service, service_data, blocking=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("CouchMate service call failed for client %s", client_id)
+            return web.json_response({"error": "service_call_failed", "message": str(err)}, status=500)
+
+        return web.json_response({
+            "success": True,
+            "client_id": client_id,
+            "domain": domain,
+            "service": service,
+            "entity_ids": entity_ids,
+        })
+
+
 async def async_setup_api(hass: HomeAssistant) -> None:
     for view in (
         CouchMateEntitiesView(),
@@ -307,6 +368,7 @@ async def async_setup_api(hass: HomeAssistant) -> None:
         PairingCancelView(),
         CouchMateClientInfoView(),
         CouchMateClientEntitiesView(),
+        CouchMateClientServiceView(),
     ):
         hass.http.register_view(view)
     _LOGGER.info("CouchMate Core REST and pairing API endpoints registered")
