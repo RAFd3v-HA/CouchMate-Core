@@ -133,7 +133,7 @@ class CouchMateInfoView(HomeAssistantView):
         hass = request.app["hass"]
         return web.json_response({
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.5",
+            "version": "1.1.0-alpha.6",
             "domain": DOMAIN,
             "filtered_entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
             "pairing": True,
@@ -253,7 +253,7 @@ class CouchMateClientInfoView(HomeAssistantView):
         return web.json_response({
             "client_id": client_id,
             "integration": "CouchMate Core",
-            "version": "1.1.0-alpha.5",
+            "version": "1.1.0-alpha.6",
             "status": "active",
             "entities_count": len(hass.data.get(DOMAIN, {}).get("entities", [])),
         })
@@ -341,9 +341,19 @@ class CouchMateClientServiceView(HomeAssistantView):
         if wrong_domain:
             return web.json_response({"error": "domain_mismatch", "entities": wrong_domain}, status=400)
 
-        service_data["entity_id"] = entity_ids
+        existing = [entity_id for entity_id in entity_ids if hass.states.get(entity_id) is not None]
+        if len(existing) != len(entity_ids):
+            missing = sorted(set(entity_ids) - set(existing))
+            return web.json_response({"error": "entity_not_found", "entities": missing}, status=404)
+
         try:
-            await hass.services.async_call(domain, service, service_data, blocking=True)
+            await hass.services.async_call(
+                domain,
+                service,
+                service_data,
+                blocking=True,
+                target={"entity_id": entity_ids},
+            )
         except Exception as err:  # noqa: BLE001
             _LOGGER.exception("CouchMate service call failed for client %s", client_id)
             return web.json_response({"error": "service_call_failed", "message": str(err)}, status=500)
